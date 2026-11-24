@@ -3047,7 +3047,8 @@ impl<'a> Lower<'a> {
         // How the program uses the descriptor tells the view's kind: its
         // own uses, else those of a twin load of the same dwords (a
         // non-uniform index reloads the descriptor in each waterfall loop,
-        // one for the size bits, another for the access).
+        // one for the size bits, another for the access; see
+        // `resource::Waterfall::sizes` for the twin of a proven loop).
         let uses = |twin: &dyn Fn(Site) -> bool| {
             self.x
                 .res
@@ -3061,8 +3062,10 @@ impl<'a> Lower<'a> {
                     })
                 })
         };
-        let use_at =
-            uses(&|load| load == site).or_else(|| uses(&|load| self.twin_loads(site, load)));
+        let proven = self.x.res.waterfall.sizes.iter().find(|s| s.0 == site);
+        let use_at = uses(&|load| load == site)
+            .or_else(|| uses(&|load| proven.is_some_and(|s| s.1 == load)))
+            .or_else(|| uses(&|load| self.twin_loads(site, load)));
         let (first, src, props, image, uav) = if let Some((at, first)) = use_at {
             let src = Source::Loaded { load: site, first };
             let used = self.used_kind(&src);
@@ -7434,6 +7437,17 @@ mod tests {
             assert_eq!(l.nonuniform_handles, 1);
             assert!(!l.wave_ops);
         }
+    }
+
+    #[test]
+    fn a_console_waterfall_that_only_sizes_reads_each_lanes_own_dimensions() {
+        use crate::resource::tests::WATERFALL_SIZED_WAVE32;
+        let (layout, used) = texture_and_uav_tables();
+        let l = lower_wave(WATERFALL_SIZED_WAVE32, layout, used, false).unwrap();
+        // The sizing loop's and the sampling loop's handles, both each
+        // lane's own entry.
+        assert_eq!(l.nonuniform_handles, 2);
+        assert!(!l.wave_ops);
     }
 
     /// [`texture_tables`] with a raw buffer UAV at dword 16 of the first.
