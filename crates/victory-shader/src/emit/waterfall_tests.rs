@@ -262,6 +262,11 @@ fn lanes_size_the_entry_their_offset_names_in_the_console_waterfall() {
     // Hardware only: the WARP in Windows (10.0.26100.9818) returns lane 0's
     // size to every lane of a non-uniform getDimensions, also for a shader
     // compiled from HLSL; the packaged WARP 1.0.22 gives each lane its own.
+    // Host::new(false) still selects WARP when the environment forces it.
+    if std::env::var("VICTORY_WARP").is_ok_and(|v| v == "1") {
+        eprintln!("hardware dispatch skipped (VICTORY_WARP=1)");
+        return;
+    }
     for (label, words) in run_on(&shader, &views, &[("hardware", false)]) {
         // Even lanes sample entry 0 (red 1.0, height 1), odd lanes entry 1
         // (red 2.0, height 3): red plus the height - 1.
